@@ -1,4 +1,4 @@
-# TABELA 5.2 – EVASÃO AO FINAL DO 2º PERÍODO
+# TABELA 5.3 – EVASÃO AO FINAL DO 3º PERÍODO
 
 # 1. Pacotes
 library(tidyverse)
@@ -33,11 +33,7 @@ tabelas <- carregar_tabelas(pasta_dados)
 alunos_final <- tabelas[["alunos-final"]] %>%
   clean_names()
 
-# Conferência inicial
-colnames(alunos_final)
-glimpse(alunos_final)
-
-# 4. Filtragem da amostra (padronização e tipagem)
+# 4. Filtragem e padronização
 dados_filtrados <- alunos_final %>%
   mutate(
     periodo_de_ingresso = as.numeric(periodo_de_ingresso),
@@ -56,49 +52,50 @@ dados_filtrados <- alunos_final %>%
       curriculo,
       levels = c(1999, 2017),
       labels = c("Currículo 1999", "Currículo 2017")
-    ),
-    forma_de_ingresso = str_to_upper(str_trim(forma_de_ingresso))
+    )
   )
 
-# Tamanho final da base
-nrow(dados_filtrados)
-
 # ---------------------------------------------------------
-# 5. Identificação da evasão no 2º período
-# Critério metodológico:
+# 5. Identificação da evasão até o 3º período
+# Critério:
 # - status == INATIVO
 # - tipo_de_evasao != GRADUADO
-# - evasão ocorre no período seguinte ao ingresso
+# - evasão ocorre até dois períodos após o ingresso
 # ---------------------------------------------------------
-dados_2_periodo <- dados_filtrados %>%
+dados_3_periodo <- dados_filtrados %>%
   mutate(
-    evadiu_2_periodo = if_else(
+    evadiu_3_periodo = if_else(
       status == "INATIVO" &
         tipo_de_evasao != "GRADUADO" &
         !is.na(periodo_de_evasao) &
-        periodo_de_evasao <= (periodo_de_ingresso + 0.1),
+        periodo_de_evasao <= (periodo_de_ingresso + 0.2),
       1L, 0L
     )
   )
 
+# ---------------------------------------------------------
 # 6. Recorte temporal por currículo
-# (garantindo observação completa do 2º período)
-dados_2_periodo_recorte <- dados_2_periodo %>%
+# Currículo 1999: 2011.1 a 2015.2
+# Currículo 2017: 2018.1 a 2022.1
+# ---------------------------------------------------------
+dados_3_periodo_recorte <- dados_3_periodo %>%
   filter(
     (curriculo == "Currículo 1999" &
        periodo_de_ingresso >= 2011.1 &
        periodo_de_ingresso <= 2015.2) |
       (curriculo == "Currículo 2017" &
          periodo_de_ingresso >= 2018.1 &
-         periodo_de_ingresso <= 2022.2)
+         periodo_de_ingresso <= 2022.1)
   )
 
-# 7. Construção da Tabela 5.2 (ambos os currículos)
-tabela_5_2 <- dados_2_periodo_recorte %>%
+# ---------------------------------------------------------
+# 7. Construção da Tabela 5.3
+# ---------------------------------------------------------
+tabela_5_3 <- dados_3_periodo_recorte %>%
   group_by(curriculo, periodo_de_ingresso) %>%
   summarise(
-    ativos   = sum(evadiu_2_periodo == 0),
-    evadidos = sum(evadiu_2_periodo == 1),
+    ativos   = sum(evadiu_3_periodo == 0),
+    evadidos = sum(evadiu_3_periodo == 1),
     taxa_evasao = round(
       (evadidos / (ativos + evadidos)) * 100, 1
     ),
@@ -106,43 +103,48 @@ tabela_5_2 <- dados_2_periodo_recorte %>%
   ) %>%
   arrange(curriculo, periodo_de_ingresso)
 
-# Visualização da tabela completa
-tabela_5_2
+# Visualização
+tabela_5_3
 
-# 8. Tabela específica — Currículo 2017 (separada)
-tabela_5_2_2017 <- dados_2_periodo_recorte %>%
-  filter(curriculo == "Currículo 2017") %>%
-  group_by(periodo_de_ingresso) %>%
-  summarise(
-    ativos   = sum(evadiu_2_periodo == 0),
-    evadidos = sum(evadiu_2_periodo == 1),
-    taxa_evasao = round(
-      (evadidos / (ativos + evadidos)) * 100, 1
-    ),
-    .groups = "drop"
-  ) %>%
-  arrange(periodo_de_ingresso)
 
-tabela_5_2_2017
+# ---------------------------------------------------------
+# Gráfico de linhas paralelas – Tabela 5.3 (3º período)
+# Eixo X padronizado: P1 até P9
+# ---------------------------------------------------------
 
-# 9. Gráfico de linhas paralelas – Tabela 5.2
-ggplot(tabela_5_2,
-       aes(x = as.factor(periodo_de_ingresso),
-           y = taxa_evasao,
-           group = curriculo,
-           color = curriculo,
-           linetype = curriculo)) +
+library(ggplot2)
+library(dplyr)
+
+# 1. Criar índice sequencial dos períodos (P1, P2, ..., P9)
+tabela_5_3_plot <- tabela_5_3 %>%
+  group_by(curriculo) %>%
+  arrange(periodo_de_ingresso) %>%
+  mutate(periodo_ordem = row_number()) %>%
+  ungroup()
+
+# 2. Gráfico de linhas paralelas
+ggplot(
+  tabela_5_3_plot,
+  aes(
+    x = periodo_ordem,
+    y = taxa_evasao,
+    group = curriculo,
+    color = curriculo,
+    linetype = curriculo
+  )
+) +
   geom_line(size = 1) +
   geom_point(size = 2) +
+  scale_x_continuous(
+    breaks = 1:max(tabela_5_3_plot$periodo_ordem),
+    labels = paste0("P", 1:max(tabela_5_3_plot$periodo_ordem))
+  ) +
   labs(
-    title = "Taxa de evasão acumulada até o final do 2º período por currículo",
-    x = "Período de ingresso",
+    title = "Taxa de evasão acumulada até o final do 3º período por currículo",
+    x = "Período letivo (ordem sequencial)",
     y = "Taxa de evasão (%)",
     color = "Currículo",
     linetype = "Currículo"
   ) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1)
-  )
+  theme_minimal()
 
