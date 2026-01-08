@@ -1,11 +1,14 @@
-# Pacotes
+# ============================================================
+# 1. Pacotes
+# ============================================================
 library(tidyverse)
 library(janitor)
 library(readr)
 library(ggplot2)
 
-# Carregar tabelas
-
+# ============================================================
+# 2. Carregamento das tabelas
+# ============================================================
 pasta_dados <- "C:/Users/Big Data/Documents/Master UFCG/Semestre 2025.2/Tabelas"
 
 carregar_tabelas <- function(pasta) {
@@ -16,7 +19,9 @@ carregar_tabelas <- function(pasta) {
   for (arq in arquivos) {
     nome <- tools::file_path_sans_ext(basename(arq))
     df <- read_delim(
-      arq, delim = ";", show_col_types = FALSE,
+      arq,
+      delim = ";",
+      show_col_types = FALSE,
       locale = locale(decimal_mark = ".", grouping_mark = ",")
     )
     tabelas[[nome]] <- df
@@ -25,18 +30,27 @@ carregar_tabelas <- function(pasta) {
 }
 
 tabelas <- carregar_tabelas(pasta_dados)
-alunos_final <- tabelas[["alunos-final"]] %>% clean_names()
 
-# Visualizar nomes das colunas
+# ============================================================
+# 3. Base principal
+# ============================================================
+alunos_final <- tabelas[["alunos-final"]] %>%
+  clean_names()
+
+# Conferência inicial
 colnames(alunos_final)
-
-# Visão geral da estrutura
 glimpse(alunos_final)
 
-
-# Filtragem temporal da amostra
-
+# ============================================================
+# 4. Filtragem da amostra (tipagem correta)
+# ============================================================
 dados_filtrados <- alunos_final %>%
+  mutate(
+    periodo_de_ingresso = as.numeric(periodo_de_ingresso),
+    periodo_de_evasao   = as.numeric(periodo_de_evasao),
+    status              = str_to_upper(str_trim(status)),
+    tipo_de_evasao      = str_to_upper(str_trim(tipo_de_evasao))
+  ) %>%
   filter(
     periodo_de_ingresso >= 2011.1,
     periodo_de_ingresso <= 2023.2,
@@ -44,57 +58,80 @@ dados_filtrados <- alunos_final %>%
     !is.na(forma_de_ingresso)
   ) %>%
   mutate(
-    curriculo = factor(curriculo,
-                       levels = c(1999, 2017),
-                       labels = c("Currículo 1999", "Currículo 2017")),
-    periodo_de_ingresso = as.factor(periodo_de_ingresso),
+    curriculo = factor(
+      curriculo,
+      levels = c(1999, 2017),
+      labels = c("Currículo 1999", "Currículo 2017")
+    ),
     forma_de_ingresso = str_to_upper(str_trim(forma_de_ingresso))
   )
 
-# Conferência do tamanho final da base
+# Tamanho final da base
 nrow(dados_filtrados)
 
-# Tratamento da variável Cor/Raça
-
-dados_cor <- dados_filtrados %>%
-  filter(!is.na(cor), cor != "") %>%
-  mutate(
-    cor = str_to_title(str_trim(cor))
-  )
-
-# Preparação dos dados específicos do 1º período
-# Base para evasão no 1º período
+# ============================================================
+# 5. Identificação da evasão no 1º período
+#    Critério:
+#    - status == INATIVO
+#    - tipo_de_evasao != GRADUADO
+#    - evasão no mesmo período do ingresso
+# ============================================================
 dados_1_periodo <- dados_filtrados %>%
   mutate(
     evadiu_1_periodo = if_else(
-      !is.na(periodo_de_evasao) &
+      status == "INATIVO" &
+        tipo_de_evasao != "GRADUADO" &
+        !is.na(periodo_de_evasao) &
         periodo_de_evasao == periodo_de_ingresso,
-      1, 0
+      1L, 0L
     )
   )
 
-# Aplicar os recortes por currículo
+# ============================================================
+# 6. Recortes temporais por currículo
+# ============================================================
 dados_1_periodo_recorte <- dados_1_periodo %>%
   filter(
     (curriculo == "Currículo 1999" &
-       periodo_de_ingresso >= "2011.1" &
-       periodo_de_ingresso <= "2017.2") |
+       periodo_de_ingresso >= 2011.1 &
+       periodo_de_ingresso <= 2017.2) |
       (curriculo == "Currículo 2017" &
-         periodo_de_ingresso >= "2018.1" &
-         periodo_de_ingresso <= "2023.1")
+         periodo_de_ingresso >= 2018.1 &
+         periodo_de_ingresso <= 2023.1)
   )
 
-# Construção da Tabela 5.1 
+# ============================================================
+# 7. Construção da Tabela 5.1 (ambos os currículos)
+# ============================================================
 tabela_5_1 <- dados_1_periodo_recorte %>%
   group_by(curriculo, periodo_de_ingresso) %>%
   summarise(
-    ativos = sum(evadiu_1_periodo == 0),
+    ativos   = sum(evadiu_1_periodo == 0),
     evadidos = sum(evadiu_1_periodo == 1),
-    taxa_evasao = round((evadidos / (ativos + evadidos)) * 100, 1),
+    taxa_evasao = round(
+      (evadidos / (ativos + evadidos)) * 100, 1
+    ),
     .groups = "drop"
   ) %>%
   arrange(curriculo, periodo_de_ingresso)
 
-# Visualizar a tabela
+# Visualização da tabela completa
 tabela_5_1
 
+# ============================================================
+# 8. Tabela específica — Currículo 2017 (separada)
+# ============================================================
+tabela_5_1_2017 <- dados_1_periodo_recorte %>%
+  filter(curriculo == "Currículo 2017") %>%
+  group_by(periodo_de_ingresso) %>%
+  summarise(
+    ativos   = sum(evadiu_1_periodo == 0),
+    evadidos = sum(evadiu_1_periodo == 1),
+    taxa_evasao = round(
+      (evadidos / (ativos + evadidos)) * 100, 1
+    ),
+    .groups = "drop"
+  ) %>%
+  arrange(periodo_de_ingresso)
+
+tabela_5_1_2017
