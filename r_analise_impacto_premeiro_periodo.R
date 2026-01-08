@@ -61,3 +61,40 @@ dados_cor <- dados_filtrados %>%
   mutate(
     cor = str_to_title(str_trim(cor))
   )
+
+# Preparação dos dados específicos do 1º período
+# Base para evasão no 1º período
+dados_1_periodo <- dados_filtrados %>%
+  mutate(
+    evadiu_1_periodo = if_else(
+      !is.na(periodo_de_evasao) &
+        periodo_de_evasao == periodo_de_ingresso,
+      1, 0
+    )
+  )
+
+# Aplicar os recortes por currículo
+dados_1_periodo_recorte <- dados_1_periodo %>%
+  filter(
+    (curriculo == "Currículo 1999" &
+       periodo_de_ingresso >= "2011.1" &
+       periodo_de_ingresso <= "2017.2") |
+      (curriculo == "Currículo 2017" &
+         periodo_de_ingresso >= "2018.1" &
+         periodo_de_ingresso <= "2023.1")
+  )
+
+# Construção da Tabela 5.1 
+tabela_5_1 <- dados_1_periodo_recorte %>%
+  group_by(curriculo, periodo_de_ingresso) %>%
+  summarise(
+    ativos = sum(evadiu_1_periodo == 0),
+    evadidos = sum(evadiu_1_periodo == 1),
+    taxa_evasao = round((evadidos / (ativos + evadidos)) * 100, 1),
+    .groups = "drop"
+  ) %>%
+  arrange(curriculo, periodo_de_ingresso)
+
+# Visualizar a tabela
+tabela_5_1
+
