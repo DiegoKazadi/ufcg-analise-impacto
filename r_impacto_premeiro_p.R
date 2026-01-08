@@ -1,8 +1,10 @@
-# 1. Pacotes
+
+# Pacotes utilizados
 library(tidyverse)
 library(janitor)
 library(readr)
 library(ggplot2)
+
 
 # 2. Carregamento das tabelas
 pasta_dados <- "C:/Users/Big Data/Documents/Master UFCG/Semestre 2025.2/Tabelas"
@@ -61,11 +63,14 @@ dados_filtrados <- alunos_final %>%
 # Tamanho final da base
 nrow(dados_filtrados)
 
+# ------------------------------------------------------------
 # 5. Identificação da evasão no 1º período
-#    Critério:
-#    - status == INATIVO
-#    - tipo_de_evasao != GRADUADO
-#    - evasão no mesmo período do ingresso
+# Considera evasão quando:
+# - status do aluno é INATIVO
+# - não é GRADUADO
+# - período de evasão é conhecido
+# - evasão ocorre no mesmo período do ingresso
+
 dados_1_periodo <- dados_filtrados %>%
   mutate(
     evadiu_1_periodo = if_else(
@@ -77,8 +82,24 @@ dados_1_periodo <- dados_filtrados %>%
     )
   )
 
-# 6. Recortes temporais por currículo
-dados_1_periodo_recorte <- dados_1_periodo %>%
+# 6. Definição das janelas temporais analisadas
+# As janelas garantem a presença de todos os períodos,
+# inclusive aqueles sem evasões registradas
+
+janelas_1_periodo <- tibble(
+  curriculo = c(
+    rep("Currículo 1999", 11),
+    rep("Currículo 2017", 11)
+  ),
+  periodo_de_ingresso = c(
+    seq(2011.1, 2016.2, by = 0.1), 2017.2,
+    seq(2018.1, 2022.2, by = 0.1), 2023.1
+  )
+)
+
+# 7. Agregação dos dados por currículo e período de ingresso
+
+tabela_1_periodo_bruta <- dados_1_periodo %>%
   filter(
     (curriculo == "Currículo 1999" &
        periodo_de_ingresso >= 2011.1 &
@@ -86,36 +107,33 @@ dados_1_periodo_recorte <- dados_1_periodo %>%
       (curriculo == "Currículo 2017" &
          periodo_de_ingresso >= 2018.1 &
          periodo_de_ingresso <= 2023.1)
-  )
-
-# 7. Construção da Tabela 5.1 (ambos os currículos)
-tabela_5_1 <- dados_1_periodo_recorte %>%
+  ) %>%
   group_by(curriculo, periodo_de_ingresso) %>%
   summarise(
     ativos   = sum(evadiu_1_periodo == 0),
     evadidos = sum(evadiu_1_periodo == 1),
-    taxa_evasao = round(
-      (evadidos / (ativos + evadidos)) * 100, 1
-    ),
     .groups = "drop"
+  )
+
+# 8. Construção da Tabela 5.1
+# Inclusão de períodos sem registro e cálculo da taxa de evasão
+
+tabela_5_1 <- janelas_1_periodo %>%
+  left_join(
+    tabela_1_periodo_bruta,
+    by = c("curriculo", "periodo_de_ingresso")
+  ) %>%
+  mutate(
+    ativos   = replace_na(ativos, 0),
+    evadidos = replace_na(evadidos, 0),
+    taxa_evasao = if_else(
+      ativos + evadidos > 0,
+      round((evadidos / (ativos + evadidos)) * 100, 1),
+      0
+    )
   ) %>%
   arrange(curriculo, periodo_de_ingresso)
 
-# Visualização da tabela completa
+# 9. Visualização final da Tabela 5.1
+
 tabela_5_1
-
-# 8. Tabela específica — Currículo 2017 (separada)
-tabela_5_1_2017 <- dados_1_periodo_recorte %>%
-  filter(curriculo == "Currículo 2017") %>%
-  group_by(periodo_de_ingresso) %>%
-  summarise(
-    ativos   = sum(evadiu_1_periodo == 0),
-    evadidos = sum(evadiu_1_periodo == 1),
-    taxa_evasao = round(
-      (evadidos / (ativos + evadidos)) * 100, 1
-    ),
-    .groups = "drop"
-  ) %>%
-  arrange(periodo_de_ingresso)
-
-tabela_5_1_2017
