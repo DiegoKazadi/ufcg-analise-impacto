@@ -145,3 +145,90 @@ ggplot(boxplot_dados,
   theme(
     legend.position = "top"
   )
+
+# =========================================================
+# 8. Gráfico Boxplot – Taxa de evasão (P1 a P4)
+# =========================================================
+ggplot(
+  boxplot_dados,
+  aes(
+    x = periodo,
+    y = taxa_evasao,
+    fill = curriculo
+  )
+) +
+  geom_boxplot(
+    alpha = 0.75,
+    outlier.shape = 16,
+    outlier.size = 2
+  ) +
+  scale_fill_manual(
+    values = c("#F8766D", "#00BFC4")
+  ) +
+  labs(
+    title = "Distribuição das taxas de evasão por período do curso",
+    subtitle = "Comparação entre os currículos de 1999 e 2017",
+    x = "Período do curso",
+    y = "Taxa de evasão (%)",
+    fill = "Currículo"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
+    plot.subtitle = element_text(size = 11, hjust = 0.5),
+    axis.title.x = element_text(size = 11),
+    axis.title.y = element_text(size = 11),
+    axis.text = element_text(size = 10),
+    legend.position = "top",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 10)
+  )
+
+# =========================================================
+# 9. Estatísticas descritivas (média e desvio padrão)
+# =========================================================
+media_dados <- boxplot_dados %>%
+  group_by(curriculo, periodo) %>%
+  summarise(
+    media_taxa = mean(taxa_evasao, na.rm = TRUE),
+    desvio = sd(taxa_evasao, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# =========================================================
+# 10. Gráfico de linhas paralelas com pontos e barras de erro
+# =========================================================
+ggplot(media_dados,
+       aes(x = periodo,
+           y = media_taxa,
+           group = curriculo,
+           color = curriculo)) +
+  
+  # Linhas
+  geom_line(linewidth = 1) +
+  
+  # Pontos marcados
+  geom_point(size = 3) +
+  
+  # Barras de erro (desvio padrão)
+  geom_errorbar(
+    aes(ymin = media_taxa - desvio,
+        ymax = media_taxa + desvio),
+    width = 0.15,
+    linewidth = 0.6
+  ) +
+  
+  labs(
+    title = "Média da taxa de evasão por currículo e período",
+    x = "Período do curso",
+    y = "Taxa média de evasão (%)",
+    color = "Currículo"
+  ) +
+  
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "top",
+    #plot.title = element_text(hjust = 0.5, face = "bold")
+  )
+
+
