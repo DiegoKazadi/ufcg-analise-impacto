@@ -20,7 +20,7 @@ carregar_tabelas <- function(pasta) {
       show_col_types = FALSE,
       locale = locale(decimal_mark = ".", grouping_mark = ",")
     )
-    tabelas[[nome]] <- df
+    tabelas[[nome]] <- clean_names(df)
   }
   return(tabelas)
 }
@@ -28,10 +28,8 @@ carregar_tabelas <- function(pasta) {
 tabelas <- carregar_tabelas(pasta_dados)
 
 # 3. Base principal
-alunos_final <- tabelas[["alunos-final"]] %>%
-  clean_names()
+alunos_final <- tabelas[["alunos-final"]]
 
-# Conferência
 glimpse(alunos_final)
 
 # 4. Filtragem e padronização da amostra
@@ -42,26 +40,20 @@ dados_filtrados <- alunos_final %>%
     status              = str_to_upper(str_trim(status)),
     tipo_de_evasao      = str_to_upper(str_trim(tipo_de_evasao)),
     forma_de_ingresso   = str_to_upper(str_trim(forma_de_ingresso)),
-    sexo                = str_to_upper(str_trim(sexo))
+    sexo                = str_to_upper(str_trim(sexo)),
+    curriculo = factor(curriculo,
+                       levels = c(1999, 2017),
+                       labels = c("Currículo 1999", "Currículo 2017"))
   ) %>%
   filter(
     periodo_de_ingresso >= 2011.1,
     periodo_de_ingresso <= 2023.2,
-    curriculo %in% c(1999, 2017),
+    curriculo %in% c("Currículo 1999", "Currículo 2017"),
     !is.na(forma_de_ingresso)
-  ) %>%
-  mutate(
-    curriculo = factor(
-      curriculo,
-      levels = c(1999, 2017),
-      labels = c("Currículo 1999", "Currículo 2017")
-    )
   )
 
-nrow(dados_filtrados)
-
-# 5. Identificação da evasão no 1º período (P1)
-dados_1_periodo <- dados_filtrados %>%
+# 5. Identificação da evasão no 1º período
+dados_filtrados <- dados_filtrados %>%
   mutate(
     evadiu_p1 = if_else(
       status == "INATIVO" &
@@ -73,53 +65,38 @@ dados_1_periodo <- dados_filtrados %>%
   )
 
 # 6. Recorte temporal por currículo
-dados_1_periodo_recorte <- dados_1_periodo %>%
+dados_recorte <- dados_filtrados %>%
   filter(
-    (curriculo == "Currículo 1999" &
-       periodo_de_ingresso >= 2011.1 &
-       periodo_de_ingresso <= 2017.2) |
-      (curriculo == "Currículo 2017" &
-         periodo_de_ingresso >= 2018.1 &
-         periodo_de_ingresso <= 2023.1)
+    (curriculo == "Currículo 1999" & periodo_de_ingresso <= 2017.2) |
+      (curriculo == "Currículo 2017" & periodo_de_ingresso >= 2018.1)
   )
 
-stopifnot(exists("dados_1_periodo_recorte"))
-
-# 7. Tabela 5.1 — Taxa de evasão no 1º período (por ingresso)
-tabela_5_1 <- dados_1_periodo_recorte %>%
-  group_by(curriculo, periodo_de_ingresso) %>%
+# 7. Tabela de evasão por sexo
+tabela_sexo_p1 <- dados_recorte %>%
+  filter(!is.na(sexo)) %>%
+  group_by(curriculo, sexo) %>%
   summarise(
-    evadidos = sum(evadiu_p1 == 1),
+    evadidos = sum(evadiu_p1),
     total = n(),
     taxa_evasao = round((evadidos / total) * 100, 1),
     .groups = "drop"
   ) %>%
-  arrange(curriculo, periodo_de_ingresso)
-
-tabela_5_1
-
-# 8. Visão geral por perfil demográfico — SEXO (Seção 5.4.1)
-tabela_sexo_p1 <- dados_1_periodo_recorte %>%
-  filter(!is.na(sexo)) %>%
-  group_by(curriculo, sexo) %>%
-  summarise(
-    evadidos = sum(evadiu_p1 == 1),
-    total = n(),
-    taxa_evasao = round((evadidos / total) * 100, 1),
-    .groups = "drop"
-  )
+  arrange(curriculo, sexo)
 
 tabela_sexo_p1
 
-# 9. Gráfico comparativo — evasão no P1 por sexo
-ggplot(tabela_sexo_p1,
-       aes(x = sexo, y = taxa_evasao, fill = curriculo)) +
+# 8. Gráfico comparativo — evasão no 1º período por sexo
+ggplot(tabela_sexo_p1, aes(x = sexo, y = taxa_evasao, fill = curriculo)) +
   geom_col(position = "dodge") +
+  geom_text(aes(label = taxa_evasao),
+            position = position_dodge(width = 0.9),
+            vjust = -0.5, size = 3.5) +
   labs(
     title = "Taxa de evasão no 1º período por sexo",
     x = "Sexo",
     y = "Taxa de evasão (%)",
     fill = "Currículo"
   ) +
-  theme_minimal()
-
+  scale_fill_manual(values = c("Currículo 1999" = "#1f77b4",
+                               "Currículo 2017" = "#ff7f0e")) +
+  theme_minimal(base_size = 12)
