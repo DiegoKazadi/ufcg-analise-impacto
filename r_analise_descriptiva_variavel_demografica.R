@@ -1,14 +1,10 @@
-# =========================================================
 # 1. Pacotes
-# =========================================================
 library(tidyverse)
 library(janitor)
 library(readr)
 library(ggplot2)
 
-# =========================================================
 # 2. Carregamento das tabelas
-# =========================================================
 pasta_dados <- "C:/Users/Big Data/Documents/Master UFCG/Semestre 2025.2/Tabelas"
 
 carregar_tabelas <- function(pasta) {
@@ -31,18 +27,14 @@ carregar_tabelas <- function(pasta) {
 
 tabelas <- carregar_tabelas(pasta_dados)
 
-# =========================================================
 # 3. Base principal
-# =========================================================
 alunos_final <- tabelas[["alunos-final"]] %>%
   clean_names()
 
 # Conferência
 glimpse(alunos_final)
 
-# =========================================================
 # 4. Filtragem e padronização da amostra
-# =========================================================
 dados_filtrados <- alunos_final %>%
   mutate(
     periodo_de_ingresso = as.numeric(periodo_de_ingresso),
@@ -68,9 +60,7 @@ dados_filtrados <- alunos_final %>%
 
 nrow(dados_filtrados)
 
-# =========================================================
 # 5. Identificação da evasão no 1º período (P1)
-# =========================================================
 dados_1_periodo <- dados_filtrados %>%
   mutate(
     evadiu_p1 = if_else(
@@ -82,9 +72,7 @@ dados_1_periodo <- dados_filtrados %>%
     )
   )
 
-# =========================================================
 # 6. Recorte temporal por currículo
-# =========================================================
 dados_1_periodo_recorte <- dados_1_periodo %>%
   filter(
     (curriculo == "Currículo 1999" &
@@ -97,9 +85,7 @@ dados_1_periodo_recorte <- dados_1_periodo %>%
 
 stopifnot(exists("dados_1_periodo_recorte"))
 
-# =========================================================
 # 7. Tabela 5.1 — Taxa de evasão no 1º período (por ingresso)
-# =========================================================
 tabela_5_1 <- dados_1_periodo_recorte %>%
   group_by(curriculo, periodo_de_ingresso) %>%
   summarise(
@@ -112,9 +98,7 @@ tabela_5_1 <- dados_1_periodo_recorte %>%
 
 tabela_5_1
 
-# =========================================================
 # 8. Visão geral por perfil demográfico — SEXO (Seção 5.4.1)
-# =========================================================
 tabela_sexo_p1 <- dados_1_periodo_recorte %>%
   filter(!is.na(sexo)) %>%
   group_by(curriculo, sexo) %>%
@@ -127,9 +111,7 @@ tabela_sexo_p1 <- dados_1_periodo_recorte %>%
 
 tabela_sexo_p1
 
-# =========================================================
 # 9. Gráfico comparativo — evasão no P1 por sexo
-# =========================================================
 ggplot(tabela_sexo_p1,
        aes(x = sexo, y = taxa_evasao, fill = curriculo)) +
   geom_col(position = "dodge") +
