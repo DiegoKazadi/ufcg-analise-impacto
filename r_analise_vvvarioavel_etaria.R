@@ -5,7 +5,6 @@ library(readr)
 library(ggplot2)
 
 # 2. Base principal já carregada e limpa (alunos_final)
-
 dados <- alunos_final %>%
   mutate(
     periodo_de_ingresso = as.numeric(periodo_de_ingresso),
@@ -13,19 +12,31 @@ dados <- alunos_final %>%
     status              = str_to_upper(str_trim(status)),
     tipo_de_evasao      = str_to_upper(str_trim(tipo_de_evasao)),
     forma_de_ingresso   = str_to_upper(str_trim(forma_de_ingresso)),
-    faixa_etaria        = str_to_upper(str_trim(idade_aproximada_no_ingresso)),
+    idade_ingresso      = as.numeric(idade_aproximada_no_ingresso),
     curriculo = factor(curriculo,
                        levels = c(1999, 2017),
                        labels = c("Currículo 1999", "Currículo 2017"))
   ) %>%
-  filter(!is.na(faixa_etaria), !is.na(forma_de_ingresso))
+  filter(!is.na(idade_ingresso), !is.na(forma_de_ingresso))
 
-# 3. Função para calcular evasão por período
+# 3. Criar intervalos de idade
+dados <- dados %>%
+  mutate(
+    faixa_idade = case_when(
+      idade_ingresso < 18 ~ "<18",
+      idade_ingresso >= 18 & idade_ingresso <= 20 ~ "18–20",
+      idade_ingresso >= 21 & idade_ingresso <= 23 ~ "21–23",
+      idade_ingresso >= 24 ~ "24+",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(faixa_idade))
+
+# 4. Função para calcular evasão por período
 calcular_evasao_periodo <- function(df, periodo_num) {
-  
   df %>%
     mutate(
-      periodo_analise = periodo_num,
+      periodo_analise = factor(periodo_num, levels = 1:4), # garante ordem no gráfico
       evadiu = case_when(
         periodo_num == 1 ~ status == "INATIVO" & tipo_de_evasao != "GRADUADO" & periodo_de_evasao == periodo_de_ingresso,
         periodo_num == 2 ~ status == "INATIVO" & tipo_de_evasao != "GRADUADO" & periodo_de_evasao == periodo_de_ingresso + 0.5,
@@ -36,11 +47,11 @@ calcular_evasao_periodo <- function(df, periodo_num) {
     )
 }
 
-# 4. Aplicar para os 4 períodos e unir
+# 5. Aplicar para os 4 períodos e unir
 lista_periodos <- lapply(1:4, function(p) calcular_evasao_periodo(dados, p))
 dados_periodos <- bind_rows(lista_periodos)
 
-# 5. Ajustar janelas de ingresso por currículo e período
+# 6. Ajustar janelas de ingresso por currículo
 dados_periodos <- dados_periodos %>%
   mutate(
     valido = case_when(
@@ -57,31 +68,20 @@ dados_periodos <- dados_periodos %>%
   ) %>%
   filter(valido)
 
-# 6. Tabela de evasão por faixa etária e período
-tabela_faixa_periodo <- dados_periodos %>%
-  group_by(curriculo, periodo_analise, faixa_etaria) %>%
-  summarise(
-    evadidos = sum(evadiu),
-    total = n(),
-    taxa_evasao = round((evadidos / total) * 100, 1),
-    .groups = "drop"
-  )
+# 7. Gráfico boxplot — distribuição da idade de evadidos (garante todos períodos)
+# Criamos um fator completo com todos os períodos para preencher mesmo sem evasão
+periodos_completos <- factor(1:4, levels = 1:4)
+dados_periodos$periodo_analise <- factor(dados_periodos$periodo_analise, levels = levels(periodos_completos))
 
-tabela_faixa_periodo
-
-# 7. Gráfico comparativo — evasão por faixa etária e período
-ggplot(tabela_faixa_periodo, aes(x = factor(periodo_analise), y = taxa_evasao,
-                                 fill = faixa_etaria)) +
-  geom_col(position = "dodge") +
-  geom_text(aes(label = taxa_evasao),
-            position = position_dodge(width = 0.9),
-            vjust = -0.5, size = 3.5) +
+ggplot(dados_periodos %>% filter(evadiu == TRUE), 
+       aes(x = periodo_analise, y = idade_ingresso)) +
+  geom_boxplot(aes(fill = curriculo)) +
   facet_wrap(~ curriculo) +
+  scale_x_discrete(drop = FALSE) + # garante exibição de todos os níveis
   labs(
-    title = "Taxa de evasão por faixa etária nos 4 primeiros períodos",
+    title = "Idade de ingresso dos estudantes evadiram nos 4 períodos",
     x = "Período de Análise",
-    y = "Taxa de evasão (%)",
-    fill = "Faixa Etária"
+    y = "Idade no Ingresso",
+    fill = "Currículo"
   ) +
-  theme_minimal(base_size = 12) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme_minimal(base_size = 12)
