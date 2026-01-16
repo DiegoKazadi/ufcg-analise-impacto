@@ -4,34 +4,8 @@ library(janitor)
 library(readr)
 library(ggplot2)
 
-# 2. Carregamento das tabelas
-pasta_dados <- "C:/Users/Big Data/Documents/Master UFCG/Semestre 2025.2/Tabelas"
+# 2. Base principal já carregada e limpa (alunos_final)
 
-carregar_tabelas <- function(pasta) {
-  arquivos <- list.files(path = pasta, pattern = "\\.csv$", full.names = TRUE)
-  if (length(arquivos) == 0) stop("Nenhum arquivo CSV encontrado.")
-  
-  tabelas <- list()
-  for (arq in arquivos) {
-    nome <- tools::file_path_sans_ext(basename(arq))
-    df <- read_delim(
-      arq,
-      delim = ";",
-      show_col_types = FALSE,
-      locale = locale(decimal_mark = ".", grouping_mark = ",")
-    )
-    tabelas[[nome]] <- clean_names(df)
-  }
-  return(tabelas)
-}
-
-tabelas <- carregar_tabelas(pasta_dados)
-
-# 3. Base principal
-alunos_final <- tabelas[["alunos-final"]] %>%
-  clean_names()
-
-# 4. Padronização e filtragem básica
 dados <- alunos_final %>%
   mutate(
     periodo_de_ingresso = as.numeric(periodo_de_ingresso),
@@ -39,19 +13,18 @@ dados <- alunos_final %>%
     status              = str_to_upper(str_trim(status)),
     tipo_de_evasao      = str_to_upper(str_trim(tipo_de_evasao)),
     forma_de_ingresso   = str_to_upper(str_trim(forma_de_ingresso)),
-    sexo                = str_to_upper(str_trim(sexo)),
+    faixa_etaria        = str_to_upper(str_trim(idade_aproximada_no_ingresso)),
     curriculo = factor(curriculo,
                        levels = c(1999, 2017),
                        labels = c("Currículo 1999", "Currículo 2017"))
   ) %>%
-  filter(!is.na(sexo), !is.na(forma_de_ingresso)) 
+  filter(!is.na(faixa_etaria), !is.na(forma_de_ingresso))
 
-# 5. Função para determinar evasão por período de análise
+# 3. Função para calcular evasão por período
 calcular_evasao_periodo <- function(df, periodo_num) {
   
   df %>%
     mutate(
-      # Determinar o período alvo de evasão
       periodo_analise = periodo_num,
       evadiu = case_when(
         periodo_num == 1 ~ status == "INATIVO" & tipo_de_evasao != "GRADUADO" & periodo_de_evasao == periodo_de_ingresso,
@@ -60,15 +33,14 @@ calcular_evasao_periodo <- function(df, periodo_num) {
         periodo_num == 4 ~ status == "INATIVO" & tipo_de_evasao != "GRADUADO" & periodo_de_evasao == periodo_de_ingresso + 1.5,
         TRUE ~ FALSE
       )
-    ) %>%
-    filter(evadiu | !evadiu) # mantém apenas registros válidos
+    )
 }
 
-# 6. Aplicar para os 4 períodos e unir
+# 4. Aplicar para os 4 períodos e unir
 lista_periodos <- lapply(1:4, function(p) calcular_evasao_periodo(dados, p))
 dados_periodos <- bind_rows(lista_periodos)
 
-# 7. Ajuste de janelas de ingresso por currículo e período
+# 5. Ajustar janelas de ingresso por currículo e período
 dados_periodos <- dados_periodos %>%
   mutate(
     valido = case_when(
@@ -85,9 +57,9 @@ dados_periodos <- dados_periodos %>%
   ) %>%
   filter(valido)
 
-# 8. Tabela de evasão por sexo e período
-tabela_sexo_periodo <- dados_periodos %>%
-  group_by(curriculo, periodo_analise, sexo) %>%
+# 6. Tabela de evasão por faixa etária e período
+tabela_faixa_periodo <- dados_periodos %>%
+  group_by(curriculo, periodo_analise, faixa_etaria) %>%
   summarise(
     evadidos = sum(evadiu),
     total = n(),
@@ -95,21 +67,21 @@ tabela_sexo_periodo <- dados_periodos %>%
     .groups = "drop"
   )
 
-tabela_sexo_periodo
+tabela_faixa_periodo
 
-# 9. Gráfico comparativo — evasão por sexo e período
-ggplot(tabela_sexo_periodo, aes(x = factor(periodo_analise), y = taxa_evasao,
-                                fill = sexo)) +
+# 7. Gráfico comparativo — evasão por faixa etária e período
+ggplot(tabela_faixa_periodo, aes(x = factor(periodo_analise), y = taxa_evasao,
+                                 fill = faixa_etaria)) +
   geom_col(position = "dodge") +
   geom_text(aes(label = taxa_evasao),
             position = position_dodge(width = 0.9),
             vjust = -0.5, size = 3.5) +
   facet_wrap(~ curriculo) +
   labs(
-    title = "Taxa de evasão por sexo nos 4 primeiros períodos",
+    title = "Taxa de evasão por faixa etária nos 4 primeiros períodos",
     x = "Período de Análise",
     y = "Taxa de evasão (%)",
-    fill = "Sexo"
+    fill = "Faixa Etária"
   ) +
   theme_minimal(base_size = 12) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
