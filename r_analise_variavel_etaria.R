@@ -85,3 +85,4 @@ ggplot(dados_periodos %>% filter(evadiu == TRUE),
     fill = "Currículo"
   ) +
   theme_minimal(base_size = 12)
+
