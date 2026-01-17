@@ -2,7 +2,6 @@ library(tidyverse)
 library(janitor)
 library(readr)
 library(ggplot2)
-
 # Base já carregada: alunos_final
 dados <- alunos_final %>%
   mutate(
@@ -79,9 +78,12 @@ tabela_evasao_periodo <- dados_periodos %>%
 
 tabela_evasao_periodo
 
-# Gráfico atualizado — eixo X com intervalos de ingresso
+# Gráfico atualizado — eixo X com intervalos de ingresso + valores em cima das barras
 ggplot(tabela_evasao_periodo, aes(x = intervalo_periodo, y = taxa_evasao, fill = curriculo)) +
-  geom_col(position = "dodge") +
+  geom_col(position = position_dodge(width = 0.9)) +
+  geom_text(aes(label = taxa_evasao), 
+            position = position_dodge(width = 0.9), 
+            vjust = -0.5, size = 3.5) +
   labs(
     title = "Taxa de evasão por período (intervalo de ingresso)",
     x = "Intervalo de ingresso por período de análise",
